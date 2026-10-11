@@ -115,19 +115,23 @@ def assign_positions(E):
 
 def plot_intensities(E, I, min_rel_intensity,
                      n1, n2, polarization, title=None, ax=None):
-    
- 
+
     COLOR_THEORY, COLOR_OBS, COLOR_KRAMERS, INK = "#2a78d6", "#eb6834", "#2f9e6e", "#0b0b0b"
- 
+
     pos = assign_positions(E)
     I_rel = I / I.max()
     keep = I_rel >= min_rel_intensity
     pos, I_rel = pos[keep], I_rel[keep]
- 
+
     theory = {int(k): float(np.mean(I_rel[np.abs(pos) == k])) for k in np.unique(np.abs(pos))}
     if 0 in theory:
+        # The central line is a coincident pair (+0 and -0). Chalk's ratios are per
+        # component, so halve it here to put theory in the same per-component units.
         theory[0] /= 2.0
- 
+    # Bar heights, per component: the central line is a coincident pair (+0, -0),
+    # so each of the two components is drawn at half the total line intensity.
+    I_bar = np.where(pos == 0, I_rel / 2.0, I_rel)
+
     pol_code = {"parallel": "p", "p": "p", "transverse": "s", "s": "s"}[polarization]
     rows = []
     data_file = Path(__file__).with_name("chalk_observed_intensities.txt")
@@ -135,25 +139,26 @@ def plot_intensities(E, I, min_rel_intensity,
         for raw in data_file.read_text().splitlines():
             raw = raw.split("#", 1)[0].strip()
             if raw:
-                name, n, pol, num, den, observed, calc = raw.split()
+                # Only the observed ratio is used; the thesis_calc column is ignored.
+                name, n, pol, num, den, observed = raw.split()[:6]
                 if int(n) == n2 and pol == pol_code:
-                    rows.append((int(num), int(den), float(observed), float(calc)))
+                    rows.append((int(num), int(den), float(observed)))
 
-    obs = {}                           
+    obs = {}
     if rows:
-        comps = sorted({a for a, _, _, _ in rows} | {b for _, b, _, _ in rows})
-        parent = {c: c for c in comps}  
+        comps = sorted({a for a, _, _ in rows} | {b for _, b, _ in rows})
+        parent = {c: c for c in comps}
         def find(c):
             while parent[c] != c:
                 c = parent[c]
             return c
-        for a, b, _, _ in rows:
+        for a, b, _ in rows:
             parent[find(a)] = find(b)
         for root in sorted({find(c) for c in comps}):
             members = [c for c in comps if find(c) == root]
             col = {c: j for j, c in enumerate(members)}
             A, y = [], []
-            for a, b, o, _ in rows:    
+            for a, b, o in rows:
                 if a in col:
                     r = np.zeros(len(members)); r[col[a]] += 1; r[col[b]] -= 1
                     A.append(r); y.append(np.log(o))
@@ -164,8 +169,9 @@ def plot_intensities(E, I, min_rel_intensity,
             for c in members:
                 obs[c] = float(np.exp(x[col[c]] + shift))
         obs_pos = np.array([s * k for k in obs for s in ((1, -1) if k else (1,))])
-        obs_h = np.array([obs[abs(p)] * (2.0 if p == 0 else 1.0) for p in obs_pos])
- 
+        # Per-component heights, same convention as Chalk's table (0 vs 1 = 1.40 for Ha s).
+        obs_h = np.array([obs[abs(p)] for p in obs_pos])
+
     kram = {}
     kdata_file = Path(__file__).with_name("kramers_intensities.txt")
     if n1 == 2 and kdata_file.exists():
@@ -178,16 +184,15 @@ def plot_intensities(E, I, min_rel_intensity,
                     rp2, rpp2 = rp * rp, rpp * rpp
                 if int(f[1]) == n2 and f[2] == pol_code:
                     kram[delta] = kram.get(delta, 0.0) + rp2 + rpp2
-    if n1 == 2 and not kram:
-        print(f"plot_intensities: no Kramers data for n2={n2}, {polarization}")
     kram_pos = kram_h = np.array([])
     if kram:
         theory_full = {int(k): float(np.mean(I_rel[np.abs(pos) == k])) for k in np.unique(np.abs(pos))}
         common = [k for k, v in kram.items() if v > 0 and theory_full.get(k, 0) > 0]
         scale = np.exp(np.mean([np.log(theory_full[k] / kram[k]) for k in common])) if common else 1.0 / max(kram.values())
         kram_pos = np.array([s * k for k, v in kram.items() if v > 0 for s in ((1, -1) if k else (1,))])
-        kram_h = np.array([kram[abs(p)] * scale for p in kram_pos])
- 
+        # Per-component: halve the central line (coincident pair), as for theory.
+        kram_h = np.array([kram[abs(p)] * scale * (0.5 if p == 0 else 1.0) for p in kram_pos])
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 2.6))
     fig = ax.figure
@@ -197,12 +202,11 @@ def plot_intensities(E, I, min_rel_intensity,
     for p in all_pos:
         ax.text(p, -0.04, f"{abs(p)}", ha="center", va="top", fontsize=14 if len(all_pos) <= 14 else 8)
 
-    
     series = (["kramers"] if len(kram_pos) else []) + ["theory"] + (["obs"] if obs else [])
     gap = min(np.diff(all_pos)) if len(all_pos) > 1 else 1
     w = 0.75 * gap / len(series) - 0.02  # the width  of  the bars scales with the minimum gap to get always thick bars
     off = {k: (i - (len(series) - 1) / 2) * (w + 0.02) for i, k in enumerate(series)}
-    ax.bar(pos + off["theory"], I_rel, width=w, color=COLOR_THEORY, edgecolor=INK,
+    ax.bar(pos + off["theory"], I_bar, width=w, color=COLOR_THEORY, edgecolor=INK,
            linewidth=0.6, zorder=3)
     with plt.rc_context({"hatch.linewidth": 1.0}):
         if obs:
@@ -211,16 +215,14 @@ def plot_intensities(E, I, min_rel_intensity,
         if len(kram_pos):
             ax.bar(kram_pos + off["kramers"], kram_h, width=w, color=COLOR_KRAMERS, hatch="\\\\",
                    edgecolor=INK, linewidth=0.6, zorder=3)
- 
-    
-    top = max([1.0] + (list(obs_h) if obs else []) + list(kram_h))
+
+    top = max([float(I_bar.max())] + (list(obs_h) if obs else []) + list(kram_h))
     ax.set_ylim(0, top * 1.05)
     ax.set_xlim(min(all_pos) - 1, max(all_pos) + 1)
     ax.set_xticks([])
     for side in ("top", "right", "left", "bottom"):
         ax.spines[side].set_visible(False)
     ax.yaxis.set_visible(False)
-
     
     handles = []
     if len(kram_pos):
@@ -249,8 +251,8 @@ def plot_intensities(E, I, min_rel_intensity,
     return ax
 
 def main():
-    n1, n2 = 2, 6
-    polarization = "parallel"
+    n1, n2 = 2, 5
+    polarization = "transverse"
     states1 = range(n1 ** 2)
     states2 = range(n2 ** 2)
 
