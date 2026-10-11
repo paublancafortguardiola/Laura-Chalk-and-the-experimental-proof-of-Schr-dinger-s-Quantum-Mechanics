@@ -1,4 +1,4 @@
-# Laura Chalk and the Experimental Evidence for Quantum Mechanics
+# Laura Chalk and the Experimental Proof of Schrödinger's Quantum Mechanics
 
 The python script main.py computes the relative intensities of the Stark component's of the Hydrogen Balmer series using Schrödinger's  theory of Quantum mechanics.  The results are compared with 
 Laura Chalk's experimental measurements measurements (chalk_observed_intensities.txt) and Kramer's theoretical results (kramers_intensities.txt) 
