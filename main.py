@@ -1,6 +1,6 @@
 ### Laura Chalk and the experimental evidence of quantum mechanics
 # the objective  of this script is to compute the transition relative amplitudes of the Balmer
-# series in the Hydrogen  atom under the effect of a strong Magnetic field.
+# series in the Hydrogen  atom under the effect of a strong electric field.
 
 import numpy as np
 from scipy.special import eval_genlaguerre, factorial, sph_harm_y
@@ -24,7 +24,6 @@ def Y_lm(l, m, theta, phi):
 
 def psi_nlm(n, l, m, r, theta, phi):
     return R_nl(n, l, r) * Y_lm(l, m, theta, phi)
-
 
 ### Compute the matrix elements <phi(n,l,m)H_epsilon phi(n',l',m)>
 def matrix_element(n1, n2, l1, m1, l2, m2, operator):
@@ -125,11 +124,7 @@ def plot_intensities(E, I, min_rel_intensity,
 
     theory = {int(k): float(np.mean(I_rel[np.abs(pos) == k])) for k in np.unique(np.abs(pos))}
     if 0 in theory:
-        # The central line is a coincident pair (+0 and -0). Chalk's ratios are per
-        # component, so halve it here to put theory in the same per-component units.
         theory[0] /= 2.0
-    # Bar heights, per component: the central line is a coincident pair (+0, -0),
-    # so each of the two components is drawn at half the total line intensity.
     I_bar = np.where(pos == 0, I_rel / 2.0, I_rel)
 
     pol_code = {"parallel": "p", "p": "p", "transverse": "s", "s": "s"}[polarization]
@@ -139,7 +134,6 @@ def plot_intensities(E, I, min_rel_intensity,
         for raw in data_file.read_text().splitlines():
             raw = raw.split("#", 1)[0].strip()
             if raw:
-                # Only the observed ratio is used; the thesis_calc column is ignored.
                 name, n, pol, num, den, observed = raw.split()[:6]
                 if int(n) == n2 and pol == pol_code:
                     rows.append((int(num), int(den), float(observed)))
@@ -169,7 +163,6 @@ def plot_intensities(E, I, min_rel_intensity,
             for c in members:
                 obs[c] = float(np.exp(x[col[c]] + shift))
         obs_pos = np.array([s * k for k in obs for s in ((1, -1) if k else (1,))])
-        # Per-component heights, same convention as Chalk's table (0 vs 1 = 1.40 for Ha s).
         obs_h = np.array([obs[abs(p)] for p in obs_pos])
 
     kram = {}
@@ -190,7 +183,6 @@ def plot_intensities(E, I, min_rel_intensity,
         common = [k for k, v in kram.items() if v > 0 and theory_full.get(k, 0) > 0]
         scale = np.exp(np.mean([np.log(theory_full[k] / kram[k]) for k in common])) if common else 1.0 / max(kram.values())
         kram_pos = np.array([s * k for k, v in kram.items() if v > 0 for s in ((1, -1) if k else (1,))])
-        # Per-component: halve the central line (coincident pair), as for theory.
         kram_h = np.array([kram[abs(p)] * scale * (0.5 if p == 0 else 1.0) for p in kram_pos])
 
     if ax is None:
@@ -228,7 +220,7 @@ def plot_intensities(E, I, min_rel_intensity,
     if len(kram_pos):
         handles.append(Patch(facecolor=COLOR_KRAMERS, edgecolor=INK, linewidth=0.6, hatch="\\\\",
                              label="Kramers 1919"))
-    handles.append(Patch(facecolor=COLOR_THEORY, edgecolor=INK, linewidth=0.6, label="Schrödinger 1926"))
+    handles.append(Patch(facecolor=COLOR_THEORY, edgecolor=INK, linewidth=0.6, label="This work"))
     if obs:
         handles.append(Patch(facecolor=COLOR_OBS, edgecolor=INK, linewidth=0.6, hatch="////",
                              label="Chalk 1928"))
@@ -240,7 +232,7 @@ def plot_intensities(E, I, min_rel_intensity,
     line = rf"$\mathrm{{H}}_\{greek[n2]}$" if n1 == 2 and n2 in greek else rf"${n2}\to{n1}$"
     pol_sym = r"$\parallel$" if pol_code == "p" else r"$\perp$"
     ax.text(0.0, 1.0, f"{line}{pol_sym}", transform=ax.transAxes, ha="left", va="top", fontsize=18,
-            zorder=10,   # above the bars
+            zorder=10,   
             bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="none", alpha=0.85))
 
     fig.tight_layout()
@@ -251,8 +243,8 @@ def plot_intensities(E, I, min_rel_intensity,
     return ax
 
 def main():
-    n1, n2 = 2, 5
-    polarization = "transverse"
+    n1, n2 = 2, 6
+    polarization = "parallel"
     states1 = range(n1 ** 2)
     states2 = range(n2 ** 2)
 
@@ -268,14 +260,12 @@ def main():
     if polarization == "transverse":
             H_n1n2 = build_matrix(n1, n2, "x")
 
-
     E, I, labels = collect_lines(val_1, vec_1, val_2, vec_2, H_n1n2, states1, states2)
 
     E, I = merge_degenerate(E, I, tol)
 
     plot_intensities(E, I, min_rel_intensity,
                      n1, n2, polarization)
-
 
 if __name__ == "__main__":
     main()
